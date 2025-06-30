@@ -9,7 +9,7 @@ export default function OnboardingPage() {
             Welcome to Wonder!
           </h1>
           <p className="text-xl text-gray-600 dark:text-gray-300">
-            Let's personalize your experience by understanding what you love to do.
+            Let&apos;s get started!sonalize your experience by understanding what you love to do.
           </p>
         </div>
 

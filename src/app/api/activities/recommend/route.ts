@@ -4,9 +4,12 @@ import type { UserPreferences } from '@/types/preferences';
 import { jsonrepair } from 'jsonrepair';
 // OpenRouter config
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+console.log('OPENROUTER_API_KEY present:', !!OPENROUTER_API_KEY);
 const OPENROUTER_MODEL = 'mistralai/mistral-7b-instruct:free';
 
-async function openRouterChat(messages: any[], temperature = 0.7, max_tokens = 700): Promise<string> {
+type OpenRouterMessage = { role: 'system' | 'user' | 'assistant'; content: string };
+
+async function openRouterChat(messages: OpenRouterMessage[], temperature = 0.7, max_tokens = 700): Promise<string> {
   if (!OPENROUTER_API_KEY) throw new Error('Missing OPENROUTER_API_KEY');
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
@@ -24,14 +27,16 @@ async function openRouterChat(messages: any[], temperature = 0.7, max_tokens = 7
   });
   if (!res.ok) {
     const text = await res.text();
+    console.error('OpenRouter API error. Status:', res.status, 'Body:', text);
     throw new Error(`OpenRouter ${res.status}: ${text}`);
   }
-    const data = await res.json();
-    if (!data.choices?.[0]?.message?.content) {
-      console.error('OpenRouter raw response:', JSON.stringify(data, null, 2));
-      throw new Error(data.error?.message || 'No choices in response');
-    }
-    return data.choices[0].message.content as string;
+  const data = await res.json();
+  console.log('OpenRouter API response:', JSON.stringify(data, null, 2));
+  if (!data.choices?.[0]?.message?.content) {
+    console.error('OpenRouter raw response (no content):', JSON.stringify(data, null, 2));
+    throw new Error(data.error?.message || 'No choices in response');
+  }
+  return data.choices[0].message.content as string;
 }
 
 function extractJson(raw: string): string {
@@ -65,29 +70,58 @@ async function generateActivities(cacheKey: string, loc: Location): Promise<Acti
   // 24-hour cache
   const cached = activityCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < 86_400_000) {
+    console.log('Returning activities from cache:', cached.data);
     return cached.data;
   }
-  if (!OPENROUTER_API_KEY) return mockActivities; // fallback if no key
+  if (!OPENROUTER_API_KEY) {
+    console.log('No OPENROUTER_API_KEY, returning mockActivities');
+    return mockActivities;
+  }
 
-  const systemMsg = 'You are a helpful travel guide that creates concise JSON.';
-  const userMsg = `Return JSON with an array named \\"activities\\" (max 8 items). Each activity must include: id (string), name, description (<=120 chars), categories (array one or more of outdoor_adventure, food_drink, arts_culture, sports, wellness, nightlife), location { lat, lng } within 10 miles of (${loc.lat}, ${loc.lng}), priceLevel (free | low | medium | high), activityLevel (low | medium | high), duration (minutes, integer), bestTimes (array of morning | afternoon | evening | night), imageUrl (royalty-free Unsplash URL).
-Respond ONLY the JSON.`;
+  const systemMsg = `You are a helpful travel guide that creates concise, structured JSON.`;
+  const userMsg = `
+Suggest up to 8 unique, interesting activities near the given location. For each, return a JSON object with:
+- id (string, unique)
+- name (string)
+- description (1-2 sentences)
+- categories (array of strings)
+- location (object: { lat: number, lng: number })
+- priceLevel (free, low, medium, luxury)
+- activityLevel (low, medium, high)
+- duration (minutes)
+- bestTimes (array: morning, afternoon, evening)
+- imageUrl (Unsplash or relevant stock photo URL)
+Respond with a JSON array ONLY, no extra text, no explanation.`;
 
   let rawContent = '';
-  try {
+try {
     rawContent = await openRouterChat([
       { role: 'system', content: systemMsg },
-      { role: 'user', content: userMsg },
-    ], 0.7, 700);
-    const cleaned = jsonrepair(extractJson(rawContent));
-    const parsed = JSON.parse(cleaned) as { activities: Activity[] };
-    const acts = parsed.activities?.length ? parsed.activities : mockActivities;
+      { role: 'user', content: userMsg + `\nLocation: ${JSON.stringify(loc)}` }
+    ]);
+    console.log('Raw LLM content:', rawContent);
+    const cleaned = extractJson(rawContent);
+    let parsed: unknown = null;
+    try {
+      parsed = JSON.parse(jsonrepair(cleaned));
+    } catch (err: unknown) {
+      console.error('Error parsing/reparing LLM output:', err, cleaned);
+      return mockActivities;
+    }
+    let acts: Activity[] = Array.isArray(parsed) ? parsed as Activity[] : (typeof parsed === 'object' && parsed !== null && 'activities' in parsed ? (parsed as { activities: Activity[] }).activities : []);
+    acts = acts.filter((a: Activity) => a && a.id && a.location && typeof a.location.lat === 'number' && typeof a.location.lng === 'number');
     activityCache.set(cacheKey, { timestamp: Date.now(), data: acts });
+    if (!acts || acts.length === 0) {
+      console.warn('LLM returned no activities, falling back to mockActivities. Parsed object:', JSON.stringify(parsed, null, 2));
+      return mockActivities;
+    }
+    console.log('Returning activities from LLM:', acts);
     return acts;
-  } catch (err) {
-    console.error('Raw LLM output:', rawContent);
-    console.error('Cleaned JSON attempt:', extractJson(rawContent));
-    console.error('generateActivities LLM error:', (err as any)?.message);
+  } catch (err: unknown) {
+    console.error('Raw LLM output:', typeof rawContent !== 'undefined' ? rawContent : '');
+    console.error('Cleaned JSON attempt:', typeof rawContent !== 'undefined' ? extractJson(rawContent) : '');
+    console.error('generateActivities LLM error:', err instanceof Error ? err.message : String(err));
+    console.log('generateActivities LLM error, returning mockActivities:', mockActivities);
     return mockActivities;
   }
 }
@@ -244,17 +278,18 @@ function getRecommendations(
   userLocation: Location,
   activities: Activity[]
 ): ActivityMatch[] {
-  // Calculate scores and create matches
-  const matches = activities.map(activity => {
-    const distance = calculateDistance(userLocation, activity.location);
-    const { score, reasons } = calculateScore(activity, userPreferences, distance);
-    
-    return {
-      activity,
-      score,
-      matchReasons: reasons
-    };
-  });
+  // Calculate scores and create matches, skip activities with missing location
+  const matches = activities
+    .filter(activity => activity.location && typeof activity.location.lat === 'number' && typeof activity.location.lng === 'number')
+    .map(activity => {
+      const distance = calculateDistance(userLocation, activity.location);
+      const { score, reasons } = calculateScore(activity, userPreferences, distance);
+      return {
+        activity,
+        score,
+        matchReasons: reasons
+      };
+    });
 
   // Sort by score descending
   return matches.sort((a, b) => b.score - a.score);
@@ -312,8 +347,10 @@ export async function POST(request: Request) {
     // Generate or retrieve activities for this location
     const actCacheKey = `${Math.round(location.lat * 100) / 100},${Math.round(location.lng * 100) / 100}`;
     const activities = await generateActivities(actCacheKey, location);
+console.log('activities input:', JSON.stringify(activities, null, 2));
 
-    const quickMatches = getRecommendations(userPreferences, location, activities);
+    const matches = getRecommendations(userPreferences, location, activities);
+console.log('matches from getRecommendations:', JSON.stringify(matches, null, 2));
 
     // Cache key based on prefs + rounded location (0.01 deg)
     const cacheKey = JSON.stringify({
@@ -330,11 +367,11 @@ export async function POST(request: Request) {
 
     // If no OpenRouter, return quick matches directly
     if (!OPENROUTER_API_KEY) {
-      return NextResponse.json(quickMatches);
+      return NextResponse.json(matches);
     }
 
     // Build AI prompt with top 10 quick matches
-    const topActivities = quickMatches.slice(0, 10).map(m => m.activity);
+    const topActivities = matches.slice(0, 10).map(m => m.activity);
     const prompt = `You are a travel activity recommender. Rank the following activities for the user. Respond ONLY with JSON matching this schema: {\n  \"recommendations\": [ { \"activityId\": string, \"score\": number, \"reasons\": string[] } ]\n}.\nUser preferences: ${JSON.stringify(userPreferences)}\nActivities: ${JSON.stringify(topActivities)}`;
 
     try {
@@ -350,15 +387,16 @@ export async function POST(request: Request) {
       }));
       aiCache.set(cacheKey, { timestamp: Date.now(), data: aiMatches });
       return NextResponse.json(aiMatches);
-    } catch (err: any) {
-      console.error('OpenRouter error, falling back to quick matches:', err?.message);
-      return NextResponse.json(quickMatches);
+    } catch (err) {
+      console.error('OpenRouter error, falling back to quick matches:', err instanceof Error ? err.message : String(err));
+      return NextResponse.json(matches);
     }
   } catch (error) {
     console.error('Recommendation error:', error);
     return NextResponse.json(
-      { error: 'Failed to get recommendations' },
+      { error: 'Failed to get recommendations', details: error?.toString() },
       { status: 500 }
     );
   }
 }
+

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { UserPreferences } from '@/types/preferences';
 
 // TODO: Replace with actual database
-let userPreferences: Record<string, UserPreferences> = {};
+const userPreferences: Record<string, UserPreferences> = {};
 
 export async function POST(request: Request) {
   const userId = 'user123'; // TODO: Get from auth

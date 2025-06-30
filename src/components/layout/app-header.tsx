@@ -1,8 +1,17 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
 
 export function AppHeader() {
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/login');
+  };
+
   return (
     <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -27,15 +36,20 @@ export function AppHeader() {
             >
               Favorites
             </Link>
-            <button
-              onClick={() => {
-                // TODO: Implement logout
-                console.log('Logout clicked');
-              }}
-              className="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white transition-colors"
-            >
-              Logout
-            </button>
+            <div className="flex items-center gap-4">
+              <Link
+                href="/profile"
+                className="text-sm font-medium text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white"
+              >
+                Profile
+              </Link>
+              <button
+                onClick={handleLogout}
+                className="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white transition-colors"
+              >
+                Logout
+              </button>
+            </div>
           </nav>
         </div>
       </div>

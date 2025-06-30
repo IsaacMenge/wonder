@@ -136,7 +136,7 @@ export function PreferenceQuiz() {
                   ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
                   : 'border-gray-200 dark:border-gray-700'
               } hover:border-purple-500 transition-colors text-left`}
-              onClick={() => setPreferences(prev => ({ ...prev, budget: budget as any }))}
+              onClick={() => setPreferences(prev => ({ ...prev, budget: budget as UserPreferences['budget'] }))}
             >
               <h3 className="font-semibold text-gray-900 dark:text-white capitalize">{budget}</h3>
               <p className="text-sm text-gray-600 dark:text-gray-300">
@@ -162,7 +162,7 @@ export function PreferenceQuiz() {
                   ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
                   : 'border-gray-200 dark:border-gray-700'
               } hover:border-purple-500 transition-colors text-left`}
-              onClick={() => setPreferences(prev => ({ ...prev, activityLevel: level as any }))}
+              onClick={() => setPreferences(prev => ({ ...prev, activityLevel: level as UserPreferences['activityLevel'] }))}
             >
               <h3 className="font-semibold text-gray-900 dark:text-white capitalize">{level}</h3>
               <p className="text-sm text-gray-600 dark:text-gray-300">

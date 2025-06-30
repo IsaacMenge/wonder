@@ -1,18 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import type { Activity, ActivityMatch, Location } from '@/types/activity';
+import type { ActivityMatch } from '@/types/activity';
 import { ActivityCard } from '@/components/explore/activity-card';
 import { AppHeader } from '@/components/layout/app-header';
 
-// Default coordinates for Denver
-const DENVER_COORDS: Location = {
-  lat: 39.7392,
-  lng: -104.9903
-};
-
 export default function ExplorePage() {
-  const [location, setLocation] = useState<Location | null>(null);
   const [cityState, setCityState] = useState({ city: '', state: '' });
   const [recommendations, setRecommendations] = useState<ActivityMatch[]>([]);
   const [loading, setLoading] = useState(false);
@@ -41,7 +34,7 @@ export default function ExplorePage() {
         throw new Error(geoData.error || 'Failed to geocode location');
       }
       const coords = geoData as { lat: number; lng: number };
-      setLocation(coords);
+      // setLocation removed: location state is no longer used in this component.coords);
 
       // 2) Fetch recommendations using those coordinates
       const recRes = await fetch('/api/activities/recommend', {
@@ -131,7 +124,7 @@ export default function ExplorePage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {recommendations.map((match) => (
+                {recommendations.filter(match => match.activity && match.activity.id).map((match) => (
                   <ActivityCard key={match.activity.id} match={match} />
                 ))}
               </div>

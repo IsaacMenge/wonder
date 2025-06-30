@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 
 export default function Home() {
@@ -55,7 +54,7 @@ export default function Home() {
                 </svg>
               </div>
               <h3 className="text-xl font-semibold mb-2">Personalized For You</h3>
-              <p className="text-gray-600 dark:text-gray-300">Tell us what you love, and we'll find the perfect activities.</p>
+              <p className="text-gray-600 dark:text-gray-300">Tell us what you love, and we&apos;ll find the perfect activities.</p>
             </div>
             <div className="p-6 rounded-2xl bg-white dark:bg-gray-800 shadow-lg">
               <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/50 rounded-full flex items-center justify-center mb-4">
@@ -74,7 +73,7 @@ export default function Home() {
                 </svg>
               </div>
               <h3 className="text-xl font-semibold mb-2">AI-Powered</h3>
-              <p className="text-gray-600 dark:text-gray-300">Smart recommendations that get better the more you use them.</p>
+              <p className="text-gray-600 dark:text-gray-300">Smart recommendations that get better the more you use them. That&apos;s the Wonder way!</p>
             </div>
           </div>
         </main>

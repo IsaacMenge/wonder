@@ -19,7 +19,7 @@ export function AuthForm({ mode }: AuthFormProps) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
     setLoading(true);
@@ -42,8 +42,8 @@ export function AuthForm({ mode }: AuthFormProps) {
         if (error) throw error;
         router.push('/explore');
       }
-    } catch (err: any) {
-      setError(err.message || 'Authentication error');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Authentication error');
     } finally {
       setLoading(false);
     }

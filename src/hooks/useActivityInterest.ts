@@ -34,8 +34,8 @@ export function useActivityInterest(activityId: string) {
       });
       if (error) throw error;
       fetchUsers();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }

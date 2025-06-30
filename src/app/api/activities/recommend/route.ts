@@ -66,6 +66,14 @@ const aiCache: Map<string, { timestamp: number; data: ActivityMatch[] }> = new M
 // Cache for GPT-generated activities per location (24-hour TTL)
 const activityCache: Map<string, { timestamp: number; data: Activity[] }> = new Map();
 
+// Timeout helper for OpenRouter calls
+async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error('OpenRouter timeout')), ms))
+  ]);
+}
+
 async function generateActivities(cacheKey: string, loc: Location): Promise<Activity[]> {
   // 24-hour cache
   const cached = activityCache.get(cacheKey);
@@ -95,10 +103,13 @@ Respond with a JSON array ONLY, no extra text, no explanation.`;
 
   let rawContent = '';
 try {
-    rawContent = await openRouterChat([
-      { role: 'system', content: systemMsg },
-      { role: 'user', content: userMsg + `\nLocation: ${JSON.stringify(loc)}` }
-    ]);
+    rawContent = await withTimeout(
+      openRouterChat([
+        { role: 'system', content: systemMsg },
+        { role: 'user', content: userMsg + `\nLocation: ${JSON.stringify(loc)}` }
+      ]),
+      7000 // 7 second timeout
+    );
     console.log('Raw LLM content:', rawContent);
     const cleaned = extractJson(rawContent);
     let parsed: unknown = null;

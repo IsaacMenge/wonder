@@ -370,14 +370,25 @@ console.log('matches from getRecommendations:', JSON.stringify(matches, null, 2)
       return NextResponse.json(matches);
     }
 
-    // Build AI prompt with top 10 quick matches
-    const topActivities = matches.slice(0, 10).map(m => m.activity);
+    // Build AI prompt with top 5 quick matches
+    const topActivities = matches.slice(0, 5).map(m => m.activity);
     const prompt = `You are a travel activity recommender. Rank the following activities for the user. Respond ONLY with JSON matching this schema: {\n  \"recommendations\": [ { \"activityId\": string, \"score\": number, \"reasons\": string[] } ]\n}.\nUser preferences: ${JSON.stringify(userPreferences)}\nActivities: ${JSON.stringify(topActivities)}`;
 
+    // Timeout helper
+    async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+      return Promise.race([
+        promise,
+        new Promise<T>((_, reject) => setTimeout(() => reject(new Error('OpenRouter rerank timeout')), ms))
+      ]);
+    }
+
     try {
-      const rawContent = await openRouterChat([
-        { role: 'user', content: prompt }
-      ], 0.2, 400);
+      const rawContent = await withTimeout(
+        openRouterChat([
+          { role: 'user', content: prompt }
+        ], 0.2, 250),
+        7000 // 7 second timeout
+      );
       const cleaned = jsonrepair(extractJson(rawContent));
       const parsed = JSON.parse(cleaned) as { recommendations: { activityId: string; score: number; reasons: string[] }[] };
       const aiMatches: ActivityMatch[] = parsed.recommendations.map(r => ({
@@ -388,7 +399,7 @@ console.log('matches from getRecommendations:', JSON.stringify(matches, null, 2)
       aiCache.set(cacheKey, { timestamp: Date.now(), data: aiMatches });
       return NextResponse.json(aiMatches);
     } catch (err) {
-      console.error('OpenRouter error, falling back to quick matches:', err instanceof Error ? err.message : String(err));
+      console.error('OpenRouter rerank error or timeout, falling back to quick matches:', err instanceof Error ? err.message : String(err));
       return NextResponse.json(matches);
     }
   } catch (error) {

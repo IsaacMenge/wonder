@@ -5,7 +5,7 @@ import { jsonrepair } from 'jsonrepair';
 // OpenRouter config
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 console.log('OPENROUTER_API_KEY present:', !!OPENROUTER_API_KEY);
-const OPENROUTER_MODEL = 'mistralai/mistral-7b-instruct:free';
+const OPENROUTER_MODEL = 'meta-llama/llama-3-8b'; // Balance of speed and quality
 
 type OpenRouterMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 

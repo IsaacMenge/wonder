@@ -381,9 +381,9 @@ console.log('matches from getRecommendations:', JSON.stringify(matches, null, 2)
       return NextResponse.json(matches);
     }
 
-    // Build AI prompt with top 5 quick matches
-    const topActivities = matches.slice(0, 5).map(m => m.activity);
-    const prompt = `You are a travel activity recommender. Rank the following activities for the user. Respond ONLY with JSON matching this schema: {\n  \"recommendations\": [ { \"activityId\": string, \"score\": number, \"reasons\": string[] } ]\n}.\nUser preferences: ${JSON.stringify(userPreferences)}\nActivities: ${JSON.stringify(topActivities)}`;
+    // Build a highly specific prompt for the LLM rerank step
+    const topActivities = matches.slice(0, 10).map(m => m.activity);
+    const prompt = `You are a travel activity recommender. Your job is to suggest unique, local activities that fit the user's preferences and current location. Avoid generic or touristy suggestions. Each activity should be tailored to the user's interests, budget, activity level, and time of day. Respond ONLY with valid JSON as described.\n\nUser location: ${location.lat}, ${location.lng}\nUser preferences:\n- Categories: ${JSON.stringify(userPreferences.categories)}\n- Budget: ${userPreferences.budget}\n- Activity Level: ${userPreferences.activityLevel}\n- Preferred Time: ${JSON.stringify(userPreferences.preferredTime)}\n- Max Travel Distance: ${userPreferences.travelDistance} miles\n\nHere are some candidate activities nearby:\n${JSON.stringify(topActivities, null, 2)}\n\nRank the activities in order of best fit for this user. For each, explain specifically WHY it matches the user's interests and location. Avoid repeating generic reasons. If none are a good fit, say so.\n\nRespond ONLY with JSON matching this schema:\n{\n  \"recommendations\": [\n    { \"activityId\": string, \"score\": number, \"reasons\": string[] }\n  ]\n}`;
 
     // Timeout helper
     async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {

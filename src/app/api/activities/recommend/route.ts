@@ -131,100 +131,22 @@ async function generateActivities(cacheKey: string, loc: Location, userPreferenc
         { role: 'system', content: systemMsg },
         { role: 'user', content: userMsg }
       ], 0.2, 400),
-
-// Mock activities database
-const mockActivities: Activity[] = [
-  {
-    id: '1',
-    name: 'Mountain Trail Hike',
-    description: 'A beautiful 3-mile hiking trail with scenic mountain views. Perfect for nature enthusiasts and photographers.',
-    categories: ['outdoor_adventure'],
-    location: {
-      lat: 39.7392,
-      lng: -104.9903
-    },
-    priceLevel: 'free',
-    activityLevel: 'high',
-    duration: 180,
-    bestTimes: ['morning', 'afternoon'],
-    imageUrl: 'https://images.unsplash.com/photo-1551632811-561732d1e306?q=80&w=1000',
-  },
-  {
-    id: '2',
-    name: 'Downtown Food Tour',
-    description: 'Explore local cuisine with this guided food tour featuring 5 unique restaurants and cultural insights.',
-    categories: ['food_drink', 'local_experiences'],
-    location: {
-      lat: 39.7456,
-      lng: -104.9989
-    },
-    priceLevel: 'medium',
-    activityLevel: 'low',
-    duration: 180,
-    bestTimes: ['afternoon', 'evening'],
-    imageUrl: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?q=80&w=1000',
-  },
-  {
-    id: '3',
-    name: 'Art Museum Visit',
-    description: 'Immerse yourself in contemporary and classical art with special exhibitions and guided tours available.',
-    categories: ['arts_culture'],
-    location: {
-      lat: 39.7374,
-      lng: -104.9656
-    },
-    priceLevel: 'low',
-    activityLevel: 'low',
-    duration: 120,
-    bestTimes: ['morning', 'afternoon'],
-    imageUrl: 'https://images.unsplash.com/photo-1553877522-43269d4ea984?q=80&w=1000',
-  },
-  {
-    id: '4',
-    name: 'Rock Climbing Gym',
-    description: 'Indoor climbing facility with routes for all skill levels, equipment rental, and beginner lessons.',
-    categories: ['sports', 'outdoor_adventure'],
-    location: {
-      lat: 39.7559,
-      lng: -104.9901
-    },
-    priceLevel: 'medium',
-    activityLevel: 'high',
-    duration: 120,
-    bestTimes: ['morning', 'afternoon', 'evening'],
-    imageUrl: 'https://images.unsplash.com/photo-1522163182402-834f871fd851?q=80&w=1000',
-  },
-  {
-    id: '5',
-    name: 'Sunset Yoga in the Park',
-    description: 'Outdoor yoga session suitable for all levels with amazing sunset views and peaceful atmosphere.',
-    categories: ['wellness'],
-    location: {
-      lat: 39.7616,
-      lng: -104.9622
-    },
-    priceLevel: 'low',
-    activityLevel: 'medium',
-    duration: 60,
-    bestTimes: ['evening'],
-    imageUrl: 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?q=80&w=1000',
-  },
-  {
-    id: '6',
-    name: 'Local Craft Brewery Tour',
-    description: 'Visit multiple craft breweries, learn about the brewing process, and enjoy tastings of local beers.',
-    categories: ['food_drink', 'nightlife'],
-    location: {
-      lat: 39.7599,
-      lng: -104.9853
-    },
-    priceLevel: 'medium',
-    activityLevel: 'low',
-    duration: 180,
-    bestTimes: ['afternoon', 'evening'],
-    imageUrl: 'https://images.unsplash.com/photo-1559526324-593bc073d938?q=80&w=1000',
+      7000 // 7 second timeout
+    );
+    const cleaned = extractJson(rawContent);
+    const acts = JSON.parse(cleaned) as Activity[];
+    if (!Array.isArray(acts) || acts.length === 0) throw new Error('No activities returned');
+    activityCache.set(cacheKey, { timestamp: Date.now(), data: acts });
+    console.log('Returning activities from LLM:', acts);
+    return acts;
+  } catch (err: unknown) {
+    console.error('Raw LLM output:', rawContent);
+    console.error('Cleaned JSON attempt:', extractJson(rawContent));
+    console.error('generateActivities LLM error:', err instanceof Error ? err.message : String(err));
+    console.log('generateActivities LLM error, returning mockActivities:', mockActivities);
+    return mockActivities;
   }
-];
+}
 
 function calculateScore(activity: Activity, userPreferences: UserPreferences, distance: number): {score: number; reasons: string[]} {
   const reasons: string[] = [];
@@ -278,6 +200,7 @@ function calculateScore(activity: Activity, userPreferences: UserPreferences, di
 
   return { score, reasons };
 }
+
 
 function getRecommendations(
   userPreferences: UserPreferences,

@@ -74,7 +74,42 @@ async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   ]);
 }
 
-async function generateActivities(cacheKey: string, loc: Location): Promise<Activity[]> {
+// Mock activities database
+const mockActivities: Activity[] = [
+  {
+    id: '1',
+    name: 'Mountain Trail Hike',
+    description: 'A beautiful 3-mile hiking trail with scenic mountain views. Perfect for nature enthusiasts and photographers.',
+    categories: ['outdoor_adventure'],
+    location: {
+      lat: 39.7392,
+      lng: -104.9903
+    },
+    priceLevel: 'free',
+    activityLevel: 'high',
+    duration: 180,
+    bestTimes: ['morning', 'afternoon'],
+    imageUrl: 'https://images.unsplash.com/photo-1551632811-561732d1e306?q=80&w=1000',
+  },
+  {
+    id: '2',
+    name: 'Downtown Food Tour',
+    description: 'Explore local cuisine with this guided food tour featuring 5 unique restaurants and cultural insights.',
+    categories: ['food_drink', 'local_experiences'],
+    location: {
+      lat: 39.7456,
+      lng: -104.9989
+    },
+    priceLevel: 'medium',
+    activityLevel: 'low',
+    duration: 180,
+    bestTimes: ['afternoon', 'evening'],
+    imageUrl: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?q=80&w=1000',
+  },
+  // ... (rest of mockActivities)
+];
+
+async function generateActivities(cacheKey: string, loc: Location, userPreferences: UserPreferences): Promise<Activity[]> {
   // 24-hour cache
   const cached = activityCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < 86_400_000) {
@@ -86,56 +121,16 @@ async function generateActivities(cacheKey: string, loc: Location): Promise<Acti
     return mockActivities;
   }
 
-  const systemMsg = `You are a helpful travel guide that creates concise, structured JSON.`;
-  const userMsg = `
-Suggest up to 8 unique, interesting activities near the given location. For each, return a JSON object with:
-- id (string, unique)
-- name (string)
-- description (1-2 sentences)
-- categories (array of strings)
-- location (object: { lat: number, lng: number })
-- priceLevel (free, low, medium, luxury)
-- activityLevel (low, medium, high)
-- duration (minutes)
-- bestTimes (array: morning, afternoon, evening)
-- imageUrl (Unsplash or relevant stock photo URL)
-Respond with a JSON array ONLY, no extra text, no explanation.`;
+  const systemMsg = `You are a local activity expert and JSON API.`;
+  const userMsg = `Suggest 5 unique, plausible, and local activities for a user at the given latitude/longitude. Each activity must be realistic for this area (avoid generic/touristy ideas), and tailored to the user's preferences. For each, include: id, name, description, categories, location (lat/lng), priceLevel, activityLevel, duration (minutes), bestTimes (array of strings), imageUrl (realistic Unsplash or similar link). Respond ONLY with JSON in this format: [ { id, name, description, categories, location: { lat, lng }, priceLevel, activityLevel, duration, bestTimes, imageUrl } ]\n\nUser location: ${loc.lat}, ${loc.lng}\nUser preferences: ${JSON.stringify(userPreferences)}\n`;
 
   let rawContent = '';
-try {
+  try {
     rawContent = await withTimeout(
       openRouterChat([
         { role: 'system', content: systemMsg },
-        { role: 'user', content: userMsg + `\nLocation: ${JSON.stringify(loc)}` }
-      ]),
-      7000 // 7 second timeout
-    );
-    console.log('Raw LLM content:', rawContent);
-    const cleaned = extractJson(rawContent);
-    let parsed: unknown = null;
-    try {
-      parsed = JSON.parse(jsonrepair(cleaned));
-    } catch (err: unknown) {
-      console.error('Error parsing/reparing LLM output:', err, cleaned);
-      return mockActivities;
-    }
-    let acts: Activity[] = Array.isArray(parsed) ? parsed as Activity[] : (typeof parsed === 'object' && parsed !== null && 'activities' in parsed ? (parsed as { activities: Activity[] }).activities : []);
-    acts = acts.filter((a: Activity) => a && a.id && a.location && typeof a.location.lat === 'number' && typeof a.location.lng === 'number');
-    activityCache.set(cacheKey, { timestamp: Date.now(), data: acts });
-    if (!acts || acts.length === 0) {
-      console.warn('LLM returned no activities, falling back to mockActivities. Parsed object:', JSON.stringify(parsed, null, 2));
-      return mockActivities;
-    }
-    console.log('Returning activities from LLM:', acts);
-    return acts;
-  } catch (err: unknown) {
-    console.error('Raw LLM output:', typeof rawContent !== 'undefined' ? rawContent : '');
-    console.error('Cleaned JSON attempt:', typeof rawContent !== 'undefined' ? extractJson(rawContent) : '');
-    console.error('generateActivities LLM error:', err instanceof Error ? err.message : String(err));
-    console.log('generateActivities LLM error, returning mockActivities:', mockActivities);
-    return mockActivities;
-  }
-}
+        { role: 'user', content: userMsg }
+      ], 0.2, 400),
 
 // Mock activities database
 const mockActivities: Activity[] = [
@@ -357,7 +352,7 @@ export async function POST(request: Request) {
 
     // Generate or retrieve activities for this location
     const actCacheKey = `${Math.round(location.lat * 100) / 100},${Math.round(location.lng * 100) / 100}`;
-    const activities = await generateActivities(actCacheKey, location);
+    const activities = await generateActivities(actCacheKey, location, userPreferences);
 console.log('activities input:', JSON.stringify(activities, null, 2));
 
     const matches = getRecommendations(userPreferences, location, activities);
@@ -396,7 +391,7 @@ console.log('matches from getRecommendations:', JSON.stringify(matches, null, 2)
     try {
       const rawContent = await withTimeout(
         openRouterChat([
-          { role: 'user', content: prompt }
+          { role: 'system', content: prompt }
         ], 0.2, 250),
         7000 // 7 second timeout
       );

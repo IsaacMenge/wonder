@@ -62,7 +62,7 @@ export default function ExplorePageClient() {
       const recRes = await fetch('/api/activities/recommend', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lat, lng, query: userQuery }),
+        body: JSON.stringify({ location: { lat, lng }, query: userQuery }),
       });
       const data = await recRes.json();
       if (!recRes.ok) {

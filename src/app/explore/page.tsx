@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import type { ActivityMatch } from '@/types/activity';
 import { ActivityCard } from '@/components/explore/activity-card';
 import { AppHeader } from '@/components/layout/app-header';
@@ -14,8 +15,18 @@ export default function ExplorePage() {
   const [error, setError] = useState<string | null>(null);
   const [showLocationForm, setShowLocationForm] = useState(true);
 
+  // Handle ?reset=1 query param and restore previous search when not resetting
+  const searchParams = useSearchParams();
+
   // Restore from sessionStorage on mount
   useEffect(() => {
+    // If reset flag present, clear previous search
+    if (searchParams.get('reset') === '1') {
+      sessionStorage.removeItem('wonder_last_search');
+      setShowLocationForm(true);
+      setRecommendations([]);
+      return;
+    }
     const saved = sessionStorage.getItem('wonder_last_search');
     if (saved) {
       const { city, state, userQuery, isInternational, recommendations } = JSON.parse(saved);

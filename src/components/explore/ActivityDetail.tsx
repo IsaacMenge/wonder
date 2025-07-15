@@ -20,7 +20,7 @@ export default function ActivityDetail({ activity }: ActivityDetailProps) {
   return (
     <div className="max-w-2xl mx-auto p-6">
       <button
-        onClick={() => router.push('/explore')}
+        onClick={() => router.push('/explore?reset=1') }
         className="mb-4 flex items-center gap-2 text-purple-700 dark:text-purple-200 hover:text-purple-900 dark:hover:text-purple-100 font-medium text-lg px-3 py-2 rounded-lg bg-purple-50 dark:bg-purple-900/30 hover:bg-purple-100 dark:hover:bg-purple-900/50 transition shadow-sm"
         aria-label="Back to activities"
       >

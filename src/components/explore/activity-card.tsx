@@ -3,6 +3,7 @@
 import type { ActivityMatch } from '@/types/activity';
 import { useActivityInterest } from '@/hooks/useActivityInterest';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { useUnsplashImage } from '@/hooks/useUnsplashImage';
 import Image from 'next/image';
@@ -14,6 +15,7 @@ interface ActivityCardProps {
 
 export function ActivityCard({ match }: ActivityCardProps) {
   const [chatOpen, setChatOpen] = useState(false);
+  const router = useRouter();
   const { activity, score, matchReasons } = match;
   const { users, loading, toggleInterest } = useActivityInterest(activity.id);
   const joined = users.length > 0;
@@ -80,8 +82,9 @@ export function ActivityCard({ match }: ActivityCardProps) {
           <div className="flex flex-col gap-2 items-center mb-2">
             <button
               onClick={async () => {
-                await toggleInterest();
-                window.location.href = `/activity/${activity.id}`;
+                // Fire and forget interest update
+                toggleInterest();
+                router.push(`/activity/${activity.id}`);
               }}
               disabled={loading}
               className={`px-4 py-2 rounded-full border border-purple-300 dark:border-purple-700 text-sm font-medium bg-transparent text-purple-700 dark:text-purple-200 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition disabled:opacity-50 w-44`}

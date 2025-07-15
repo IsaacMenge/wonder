@@ -66,70 +66,34 @@ export function ActivityCard({ match }: ActivityCardProps) {
       <div className="p-4">
         <div className="flex justify-between items-start mb-2">
           <h3 className="text-xl font-semibold">{activity.name}</h3>
-          <span className="bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 px-2 py-1 rounded text-sm">
-            {score}% Match
+          <span className="inline-flex items-center bg-gradient-to-r from-purple-400/80 to-purple-600/90 dark:from-purple-900 dark:to-purple-700 shadow-lg text-white px-3 py-1.5 rounded-2xl text-base font-bold tracking-tight border-2 border-white dark:border-purple-900 -mt-2 mr-1">
+            {Math.round(score)}% Match
           </span>
         </div>
         <p className="text-gray-600 dark:text-gray-300 mb-4">
           {activity.description}
         </p>
-        <div className="space-y-2">
-          <button
-            onClick={async () => {
-              // Upsert the activity into the activity table
-              const payload = {
-                name: activity.name,
-                description: activity.description,
-                image_url: unsplashUrl || activity.imageUrl || null,
-                price_level: activity.priceLevel || null,
-                activity_level: activity.activityLevel || null,
-                duration: activity.duration || null,
-                
-                website_url: activity.website || null,
-                categories: Array.isArray(activity.categories) ? activity.categories : (activity.categories ? [activity.categories] : null),
-              };
-              const { data: upserted, error: upsertErr } = await (await import('@/lib/supabase')).supabase
-                .from('activity')
-                .upsert([payload])
-                .select();
-              if (upsertErr || !upserted || upserted.length === 0) {
-                // Debug info
-                alert('Error saving activity! ' + (upsertErr?.message || 'Unknown error') + '\nPayload: ' + JSON.stringify(payload));
-                return;
-              }
-              const act = upserted[0];
-              // Insert into activity_interest (if not already)
-              await toggleInterest();
-              window.location.href = `/activity/${act.id}`;
-            }}
-            disabled={loading}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${joined ? 'bg-green-600 text-white' : 'bg-purple-600 hover:bg-purple-700 text-white'} disabled:opacity-50`}
-          >
-            {loading ? 'Saving…' : joined ? `Joined (${users.length})` : "I'm Interested"}
-          </button>
-          <button
-            onClick={() => setChatOpen(true)}
-            className="ml-2 px-4 py-2 rounded-full text-sm font-medium bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-          >
-            Chat
-          </button>
-          <div className="flex flex-wrap gap-2">
-            {activity.categories.map((category) => (
-              <span
-                key={category}
-                className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-full text-sm"
-              >
-                {category.replace('_', ' ')}
-              </span>
-            ))}
+        <div className="flex flex-col gap-3 mt-4">
+          <div className="flex flex-col gap-2 items-center mb-2">
+            <button
+              onClick={async () => {
+                await toggleInterest();
+                window.location.href = `/activity/${activity.id}`;
+              }}
+              disabled={loading}
+              className={`px-4 py-2 rounded-full border border-purple-300 dark:border-purple-700 text-sm font-medium bg-transparent text-purple-700 dark:text-purple-200 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition disabled:opacity-50 w-44`}
+            >
+              {loading ? 'Saving…' : joined ? `Joined (${users.length})` : "I'm Interested"}
+            </button>
+            <button
+              onClick={() => setChatOpen(true)}
+              className="px-4 py-2 rounded-full border border-gray-300 dark:border-gray-700 text-sm font-medium bg-transparent text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition w-44"
+            >
+              Chat
+            </button>
           </div>
-          <div className="flex gap-4 text-sm text-gray-600 dark:text-gray-400 mb-2">
-            <div className="flex items-center gap-1"><span role="img" aria-label="Price">💲</span>{activity.priceLevel}</div>
-            <div className="flex items-center gap-1"><span role="img" aria-label="Activity Level">⚡</span>{activity.activityLevel}</div>
-            <div className="flex items-center gap-1"><span role="img" aria-label="Duration">⏱️</span>{activity.duration} min</div>
-          </div>
-          <div className="mt-4 bg-purple-50 dark:bg-purple-900/40 border border-purple-100 dark:border-purple-800 rounded-lg p-3 text-sm text-purple-900 dark:text-purple-100">
-            <h4 className="font-medium mb-1">Why this matches you:</h4>
+
+          <div className="border-t border-gray-100 dark:border-gray-800 pt-2 mt-2 text-xs text-gray-500 dark:text-gray-400">
             <span>{prettifyMatchReasons(matchReasons)}</span>
           </div>
         </div>

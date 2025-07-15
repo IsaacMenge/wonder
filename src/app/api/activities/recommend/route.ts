@@ -2,14 +2,22 @@ import { NextResponse } from 'next/server';
 import type { Activity, ActivityMatch, Location } from '@/types/activity';
 import type { UserPreferences } from '@/types/preferences';
 import { jsonrepair } from 'jsonrepair';
+import { createClient } from '@supabase/supabase-js';
+import { v4 as uuidv4, validate as validateUuid } from 'uuid';
+
 // OpenRouter config
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 console.log('OPENROUTER_API_KEY present:', !!OPENROUTER_API_KEY);
-const OPENROUTER_MODEL = 'mistralai/mistral-small-3.2-24b-instruct:free'; // Free, high-quality, instruction-tuned model for recommendations
+
+
+// Supabase client setup
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+export const supabase = createClient(supabaseUrl, supabaseKey);
 
 type OpenRouterMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 
-async function openRouterChat(messages: OpenRouterMessage[], temperature = 0.7, max_tokens = 700): Promise<string> {
+async function openRouterChat(messages: OpenRouterMessage[], temperature = 0.7, max_tokens = 700, model = 'google/gemma-7b-it:free'): Promise<string> {
   if (!OPENROUTER_API_KEY) throw new Error('Missing OPENROUTER_API_KEY');
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
@@ -18,7 +26,7 @@ async function openRouterChat(messages: OpenRouterMessage[], temperature = 0.7, 
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: OPENROUTER_MODEL,
+      model,
       messages,
       temperature,
       max_tokens,
@@ -109,8 +117,9 @@ const mockActivities: Activity[] = [
   // ... (rest of mockActivities)
 ];
 
-async function generateActivities(cacheKey: string, loc: Location, userPreferences: UserPreferences): Promise<Activity[]> {
+async function generateActivities(cacheKey: string, loc: Location, userPreferences: UserPreferences, userQuery?: string): Promise<Activity[]> {
   // 24-hour cache
+  // Include userQuery in cache key to avoid stale results
   const cached = activityCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < 86_400_000) {
     console.log('Returning activities from cache:', cached.data);
@@ -122,7 +131,30 @@ async function generateActivities(cacheKey: string, loc: Location, userPreferenc
   }
 
   const systemMsg = `You are a local activity expert and JSON API.`;
-  const userMsg = `Suggest 5 unique, plausible, and local activities for a user at the given latitude/longitude. Each activity must be realistic for this area (avoid generic/touristy ideas), and tailored to the user's preferences. For each, include: id, name, description, categories, location (lat/lng), priceLevel, activityLevel, duration (minutes), bestTimes (array of strings), imageUrl (realistic Unsplash or similar link). Respond ONLY with JSON in this format: [ { id, name, description, categories, location: { lat, lng }, priceLevel, activityLevel, duration, bestTimes, imageUrl } ]\n\nUser location: ${loc.lat}, ${loc.lng}\nUser preferences: ${JSON.stringify(userPreferences)}\n`;
+// Model is now passed directly to openRouterChat; this variable is not needed.
+
+  const userMsg = `Suggest at least 5 hyper-specific, actionable, and real activities for a user at the given latitude/longitude. Each activity must:
+- Reference a real, verifiable venue, event, or landmark in the target city (never generic or made-up places)
+- Include the full street address, city, and country
+- Be feasible for a visitor or local (no generic advice)
+- Include a detailed, actionable description (2-3 sentences: why it's worth doing and how to do it)
+- Provide at least 2 actionable steps or tips (e.g., 'Reserve a table online', 'Arrive before 6pm for happy hour', 'Ask for the rooftop seating')
+- Use the local language and currency if appropriate
+- If the city is outside the US, avoid US-centric suggestions; use local context, customs, and venues
+- If the city or location is not valid or no such activities exist, return an empty array
+- Each activity must be different from the others. Do not repeat names or locations.
+
+${userQuery && userQuery.trim() ? `IMPORTANT: The user specifically requested: ${userQuery.trim()}.
+You MUST ONLY suggest activities that directly match this request. Do not include any activities that do not clearly fit the user's request. If no activities fit, return an empty array.` : ''}
+
+Respond ONLY with a single valid JSON array, and nothing else. Do NOT include any prose, comments, or text before or after the JSON. Do NOT use trailing commas. Do NOT include markdown code fences.
+
+Format: [ { id, name, description, categories, location: { lat, lng }, address, actionItems } ]
+
+User location: ${loc.lat}, ${loc.lng}
+User preferences: ${JSON.stringify(userPreferences)}
+`;
+
 
   let rawContent = '';
   try {
@@ -130,21 +162,87 @@ async function generateActivities(cacheKey: string, loc: Location, userPreferenc
       openRouterChat([
         { role: 'system', content: systemMsg },
         { role: 'user', content: userMsg }
-      ], 0.2, 400),
-      7000 // 7 second timeout
+      ], 0.2, 900, 'mistralai/mistral-small-3.2-24b-instruct:free'),
+      20000 // 20 second timeout
     );
+    console.log('Raw LLM output:', rawContent);
     const cleaned = extractJson(rawContent);
-    const acts = JSON.parse(cleaned) as Activity[];
-    if (!Array.isArray(acts) || acts.length === 0) throw new Error('No activities returned');
-    activityCache.set(cacheKey, { timestamp: Date.now(), data: acts });
-    console.log('Returning activities from LLM:', acts);
-    return acts;
+    const repaired = jsonrepair(cleaned);
+    console.log('Cleaned JSON:', cleaned);
+    console.log('Repaired JSON:', repaired);
+    const parsed = JSON.parse(repaired);
+    const acts = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed.activities)
+        ? parsed.activities
+        : [];
+    // Ensure each activity has an address field (even if undefined)
+    const actsWithAddress = acts.map((a: Activity) => ({
+      ...a,
+      address: a.address || undefined,
+      actionItems: a.actionItems || []
+    }));
+    if (!Array.isArray(actsWithAddress) || actsWithAddress.length === 0) throw new Error('No activities returned');
+
+    // --- AUTOMATICALLY UPSERT TO SUPABASE ---
+    const validActs: Activity[] = [];
+    for (const activity of actsWithAddress) {
+      // Robust logging of raw activity from LLM
+      console.log('Raw LLM activity:', JSON.stringify(activity, null, 2));
+      // Stricter checks: location must be object with lat/lng, address must be non-empty string, actionItems must be array
+      const hasValidLocation = activity.location && typeof activity.location.lat === 'number' && typeof activity.location.lng === 'number';
+      const hasValidAddress = typeof activity.address === 'string' && activity.address.trim().length > 0;
+      const hasValidActionItems = Array.isArray(activity.actionItems) && activity.actionItems.length > 0;
+      if (hasValidLocation && hasValidAddress && hasValidActionItems) {
+        validActs.push(activity);
+        // Ensure id is a valid UUID
+        const upsertId = validateUuid(activity.id) ? activity.id : uuidv4();
+        // Update the activity object so the UUID propagates to the frontend / cache
+        activity.id = upsertId as unknown as never;
+        // Only include valid Supabase columns in the upsert object
+        const upsertObj = {
+          id: upsertId,
+          name: activity.name,
+          description: activity.description,
+          categories: `{${activity.categories.join(',')}}`,
+          location: activity.location,
+          address: activity.address,
+          action_items: activity.actionItems // assumes column action_items jsonb exists
+        };
+        console.log('Upserting activity to Supabase with id:', upsertId, JSON.stringify(upsertObj, null, 2));
+        try {
+          const { data: upsertData, error: upsertError } = await supabase
+            .from('activity')
+            .upsert([upsertObj], { onConflict: 'id' })
+            .select();
+          if (upsertError) {
+            console.error('Supabase upsert error:', upsertError);
+          } else {
+            console.log('Supabase upsert result:', JSON.stringify(upsertData, null, 2));
+          }
+        } catch (e) {
+          console.error('Error upserting activity to Supabase:', upsertObj, e);
+        }
+      } else {
+        console.warn('Skipping upsert for activity due to invalid fields:', {
+          location: activity.location,
+          address: activity.address,
+          actionItems: activity.actionItems
+        });
+      }
+    }
+    // --- END UPSERT ---
+
+    activityCache.set(cacheKey, { timestamp: Date.now(), data: validActs });
+    console.log('Returning filtered valid activities from LLM:', validActs);
+    return validActs;
   } catch (err: unknown) {
-    console.error('Raw LLM output:', rawContent);
-    console.error('Cleaned JSON attempt:', extractJson(rawContent));
-    console.error('generateActivities LLM error:', err instanceof Error ? err.message : String(err));
-    console.log('generateActivities LLM error, returning mockActivities:', mockActivities);
-    return mockActivities;
+    console.error('Raw LLM output (error):', rawContent);
+    console.error('Cleaned JSON attempt (error):', extractJson(rawContent));
+    console.error('generateActivities LLM error:', err instanceof Error ? err.message : String(err), err);
+    const fallback = mockActivities.map(a => ({...a, _llmFallback: true, _llmError: err instanceof Error ? err.message : String(err)}));
+    console.log('generateActivities LLM error, returning mockActivities with fallback reason:', fallback);
+    return fallback;
   }
 }
 
@@ -244,8 +342,8 @@ function toRad(deg: number): number {
 
 export async function POST(request: Request) {
   try {
-    const { location } = await request.json();
-    console.log('Received location:', location);
+    const { location, query } = await request.json();
+    console.log('Received location:', location, 'User query:', query);
     
     if (!location || typeof location.lat !== 'number' || typeof location.lng !== 'number') {
       console.error('Invalid location:', location);
@@ -274,8 +372,8 @@ export async function POST(request: Request) {
     console.log('Using preferences:', userPreferences);
 
     // Generate or retrieve activities for this location
-    const actCacheKey = `${Math.round(location.lat * 100) / 100},${Math.round(location.lng * 100) / 100}`;
-    const activities = await generateActivities(actCacheKey, location, userPreferences);
+    const actCacheKey = `${Math.round(location.lat * 100) / 100},${Math.round(location.lng * 100) / 100},query:${(query || '').toLowerCase().trim()}`;
+    const activities = await generateActivities(actCacheKey, location, userPreferences, query);
 console.log('activities input:', JSON.stringify(activities, null, 2));
 
     const matches = getRecommendations(userPreferences, location, activities);
@@ -301,7 +399,7 @@ console.log('matches from getRecommendations:', JSON.stringify(matches, null, 2)
 
     // Build a highly specific prompt for the LLM rerank step
     const topActivities = matches.slice(0, 10).map(m => m.activity);
-    const prompt = `You are a travel activity recommender. Your job is to suggest unique, local activities that fit the user's preferences and current location. Avoid generic or touristy suggestions. Each activity should be tailored to the user's interests, budget, activity level, and time of day. Respond ONLY with valid JSON as described.\n\nUser location: ${location.lat}, ${location.lng}\nUser preferences:\n- Categories: ${JSON.stringify(userPreferences.categories)}\n- Budget: ${userPreferences.budget}\n- Activity Level: ${userPreferences.activityLevel}\n- Preferred Time: ${JSON.stringify(userPreferences.preferredTime)}\n- Max Travel Distance: ${userPreferences.travelDistance} miles\n\nHere are some candidate activities nearby:\n${JSON.stringify(topActivities, null, 2)}\n\nRank the activities in order of best fit for this user. For each, explain specifically WHY it matches the user's interests and location. Avoid repeating generic reasons. If none are a good fit, say so.\n\nRespond ONLY with JSON matching this schema:\n{\n  \"recommendations\": [\n    { \"activityId\": string, \"score\": number, \"reasons\": string[] }\n  ]\n}`;
+    const prompt = `You are a travel activity recommender. Your job is to suggest unique, local activities that fit the user's preferences and current location. Avoid generic or touristy suggestions. Each activity should be tailored to the user's interests, budget, activity level, and time of day. Respond ONLY with valid JSON as described.\n\nUser location: ${location.lat}, ${location.lng}\nUser preferences:\n- Categories: ${JSON.stringify(userPreferences.categories)}\n- Budget: ${userPreferences.budget}\n- Activity Level: ${userPreferences.activityLevel}\n- Preferred Time: ${JSON.stringify(userPreferences.preferredTime)}\n- Max Travel Distance: ${userPreferences.travelDistance} miles\n${query && query.trim() ? `\nThe user specifically requested: ${query.trim()}` : ''}\n\nHere are some candidate activities nearby:\n${JSON.stringify(topActivities, null, 2)}\n\nRank the activities in order of best fit for this user. For each, explain specifically WHY it matches the user's interests, location, and request. Avoid repeating generic reasons. If none are a good fit, say so.\n\nRespond ONLY with JSON matching this schema:\n{\n  \"recommendations\": [\n    { \"activityId\": string, \"score\": number, \"reasons\": string[] }\n  ]\n}`;
 
     // Timeout helper
     async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {

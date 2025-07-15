@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 
 interface GeocodeRequest {
   city: string;
-  state: string;
+  state?: string;
+  isInternational?: boolean;
 }
 
 interface NominatimResult {
@@ -12,13 +13,13 @@ interface NominatimResult {
 
 export async function POST(request: Request) {
   try {
-    const { city, state } = (await request.json()) as GeocodeRequest;
+    const { city, state, isInternational } = (await request.json()) as GeocodeRequest;
 
-    if (!city || !state) {
-      return NextResponse.json({ error: 'City and state are required' }, { status: 400 });
+    if (!city || (!isInternational && !state)) {
+      return NextResponse.json({ error: isInternational ? 'City is required' : 'City and state are required' }, { status: 400 });
     }
 
-    const query = encodeURIComponent(`${city}, ${state}`);
+    const query = isInternational ? encodeURIComponent(city) : encodeURIComponent(`${city}, ${state}`);
     const url = `https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`;
 
     const res = await fetch(url, {

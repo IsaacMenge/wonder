@@ -1,10 +1,12 @@
+import { headers } from 'next/headers';
 import ActivityDetail from '@/components/explore/ActivityDetail';
 
-
-
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export default async function Page(props: any) {
-  const { params } = props as { params: { id: string } };
-  return <ActivityDetail activityId={params.id} />;
+export default async function Page({ params }: { params: { id: string } }) {
+  const headersList = headers();
+  const host = headersList.get('host');
+  const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+  const url = `${protocol}://${host}/api/activities/detail/${params.id}`;
+  const res = await fetch(url, { cache: 'no-store' });
+  const activity = await res.json();
+  return <ActivityDetail activity={activity} />;
 }

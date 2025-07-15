@@ -17,8 +17,9 @@ export function AppHeader() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <Link 
-            href="/explore"
+            href="/"
             className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-600 to-pink-600"
+            aria-label="Wonder Home"
           >
             Wonder
           </Link>

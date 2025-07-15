@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { GlobalActivityGallery } from "@/components/home/GlobalActivityGallery";
 
 export default function Home() {
   return (
@@ -77,6 +78,7 @@ export default function Home() {
             </div>
           </div>
         </main>
+        <GlobalActivityGallery />
       </div>
     </div>
   );

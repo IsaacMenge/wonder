@@ -19,6 +19,12 @@ export interface Activity {
   rating?: number;
   reviews?: number;
   website?: string;
+  address?: string;
+  actionItems?: string[];
+  directions?: string;
+  localTips?: string;
+  mapUrl?: string;
+  contextDetails?: string;
 }
 
 export interface ActivityMatch {

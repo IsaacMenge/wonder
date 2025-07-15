@@ -5,6 +5,7 @@ import { useActivityInterest } from '@/hooks/useActivityInterest';
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useUnsplashImage } from '@/hooks/useUnsplashImage';
+import Image from 'next/image';
 const ActivityChat = dynamic(() => import('./activity-chat'), { ssr: false });
 
 interface ActivityCardProps {
@@ -55,10 +56,12 @@ export function ActivityCard({ match }: ActivityCardProps) {
         {imgLoading ? (
           <div className="w-full h-full flex items-center justify-center animate-pulse bg-gray-200 dark:bg-gray-700" />
         ) : (
-          <img
+          <Image
             src={unsplashUrl || activity.imageUrl || '/default-activity.jpg'}
             alt={activity.name}
             className="w-full h-full object-cover object-center transition-all duration-300"
+            width={600}
+            height={256}
             style={{ minHeight: 180 }}
           />
         )}

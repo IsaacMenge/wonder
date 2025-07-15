@@ -1,8 +1,11 @@
 import { headers } from 'next/headers';
 import ActivityDetail from '@/components/explore/ActivityDetail';
 
-export default async function Page({ params }: { params: { id: string } }) {
-  const headersList = headers();
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export default async function Page({ params }: { params: any }) {
+
+  const headersList = await headers();
   const host = headersList.get('host');
   const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
   const url = `${protocol}://${host}/api/activities/detail/${params.id}`;

@@ -1,5 +1,6 @@
 "use client";
 import { useState } from 'react';
+import Image from 'next/image';
 import { useUnsplashImage } from '@/hooks/useUnsplashImage';
 import ActivityChat from './activity-chat';
 
@@ -29,7 +30,7 @@ export default function ActivityDetail({ activity }: ActivityDetailProps) {
         Back to activities
       </button>
       <div className="rounded-2xl overflow-hidden shadow-xl mb-6">
-        <img src={unsplashUrl || activity.imageUrl || '/default-activity.jpg'} alt={activity.name} className="w-full h-64 object-cover object-center" />
+        <Image src={unsplashUrl || activity.imageUrl || '/default-activity.jpg'} alt={activity.name} className="w-full h-64 object-cover object-center" width={600} height={256} />
       </div>
       <h1 className="text-3xl font-bold mb-2">{activity.name}</h1>
       {activity.address && (
@@ -87,7 +88,7 @@ export default function ActivityDetail({ activity }: ActivityDetailProps) {
           {typeof activity.directions === 'object' && activity.directions !== null ? (
             <ul className="list-disc list-inside text-gray-700 dark:text-gray-200">
               {Object.values(activity.directions).map((val, idx) => (
-                <li key={idx}>{val}</li>
+                <li key={idx}>{typeof val === 'string' || typeof val === 'number' ? val : JSON.stringify(val)}</li>
               ))}
             </ul>
           ) : (
@@ -101,11 +102,11 @@ export default function ActivityDetail({ activity }: ActivityDetailProps) {
           {typeof activity.localTips === 'object' && activity.localTips !== null ? (
             <ul className="list-disc list-inside text-gray-700 dark:text-gray-200">
               {Object.values(activity.localTips).map((val, idx) => (
-                <li key={idx}>{val}</li>
+                <li key={idx}>{String(val)}</li>
               ))}
             </ul>
           ) : (
-            <p className="text-gray-700 dark:text-gray-200 whitespace-pre-line">{activity.localTips}</p>
+            <p className="text-gray-700 dark:text-gray-200 whitespace-pre-line">{String(activity.localTips)}</p>
           )}
         </div>
       )}

@@ -51,8 +51,11 @@ async function getLLMDetails(activity: Activity): Promise<Partial<Activity>> {
   }
 }
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
-  const id = params.id;
+import { NextRequest } from 'next/server';
+
+export async function GET(req: NextRequest) {
+  // Extract the id param from the URL pathname
+  const id = req.nextUrl.pathname.split('/').pop();
   const { data, error } = await supabase.from('activity').select('*').eq('id', id).single();
   if (error || !data) {
     console.error('Supabase error or no data:', error, data);

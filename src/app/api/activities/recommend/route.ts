@@ -13,7 +13,7 @@ console.log('OPENROUTER_API_KEY present:', !!OPENROUTER_API_KEY);
 // Supabase client setup
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-export const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 type OpenRouterMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 

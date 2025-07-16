@@ -1,10 +1,16 @@
 'use client';
 
+import { useToast } from '@/components/ui/ToastContext';
+
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { ActivityMatch } from '@/types/activity';
 import { ActivityCard } from '@/components/explore/activity-card';
 import { AppHeader } from '@/components/layout/app-header';
+
+function makeCacheKey(city: string, state: string, query: string, intl: boolean) {
+  return `wonder_rec_${intl ? 'intl' : 'us'}_${city.toLowerCase()}_${state.toLowerCase()}_${query.toLowerCase()}`;
+}
 
 export default function ExplorePageClient() {
   const [cityState, setCityState] = useState({ city: '', state: '' });
@@ -12,7 +18,7 @@ export default function ExplorePageClient() {
   const [isInternational, setIsInternational] = useState(false);
   const [recommendations, setRecommendations] = useState<ActivityMatch[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { addToast } = useToast();
   const [showLocationForm, setShowLocationForm] = useState(true);
 
   // Handle ?reset=1 query param and restore previous search when not resetting
@@ -46,6 +52,18 @@ export default function ExplorePageClient() {
     const city = formData.get('city') as string;
     const state = isInternational ? '' : (formData.get('state') as string);
 
+    const cacheKey = makeCacheKey(city, state, userQuery, isInternational);
+    try {
+      const cachedRaw = localStorage.getItem(cacheKey);
+      if (cachedRaw) {
+        const cached = JSON.parse(cachedRaw) as { ts: number; data: ActivityMatch[] };
+        if (Date.now() - cached.ts < 24 * 60 * 60 * 1000) {
+          setRecommendations(cached.data);
+        }
+      }
+    } catch (_) {}
+
+
     setCityState({ city, state });
     setShowLocationForm(false);
     setLoading(true);
@@ -56,8 +74,7 @@ export default function ExplorePageClient() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ city, state, isInternational }),
       });
-      const { lat, lng, error: geoErr } = await geoRes.json();
-      if (geoErr) throw new Error(geoErr);
+      const { lat, lng } = await geoRes.json();
 
       const recRes = await fetch('/api/activities/recommend', {
         method: 'POST',
@@ -70,7 +87,10 @@ export default function ExplorePageClient() {
       }
 
       setRecommendations(data);
-      setError(null);
+      // cache for future (24h)
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data }));
+      } catch (_) {}
       sessionStorage.setItem(
         'wonder_last_search',
         JSON.stringify({
@@ -83,7 +103,7 @@ export default function ExplorePageClient() {
       );
     } catch (err) {
       console.error('Error fetching recommendations:', err);
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      addToast(err instanceof Error ? err.message : 'An error occurred', { variant: 'error' });
       setShowLocationForm(true);
     } finally {
       setLoading(false);
@@ -149,7 +169,7 @@ export default function ExplorePageClient() {
           </form>
         ) : (
           <div className="space-y-6">
-            {error && <p className="text-red-600 dark:text-red-400">{error}</p>}
+            
             {recommendations.map((match) => (
               <ActivityCard key={match.activity.id} match={match} />
             ))}

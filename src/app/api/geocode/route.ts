@@ -19,7 +19,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: isInternational ? 'City is required' : 'City and state are required' }, { status: 400 });
     }
 
-    const query = isInternational ? encodeURIComponent(city) : encodeURIComponent(`${city}, ${state}`);
+    // If US state abbreviation provided, expand to full name for better geocode accuracy
+    const usStates: Record<string, string> = {
+      AL: 'Alabama', AK: 'Alaska', AZ: 'Arizona', AR: 'Arkansas', CA: 'California', CO: 'Colorado', CT: 'Connecticut', DE: 'Delaware', FL: 'Florida', GA: 'Georgia', HI: 'Hawaii', ID: 'Idaho', IL: 'Illinois', IN: 'Indiana', IA: 'Iowa', KS: 'Kansas', KY: 'Kentucky', LA: 'Louisiana', ME: 'Maine', MD: 'Maryland', MA: 'Massachusetts', MI: 'Michigan', MN: 'Minnesota', MS: 'Mississippi', MO: 'Missouri', MT: 'Montana', NE: 'Nebraska', NV: 'Nevada', NH: 'New Hampshire', NJ: 'New Jersey', NM: 'New Mexico', NY: 'New York', NC: 'North Carolina', ND: 'North Dakota', OH: 'Ohio', OK: 'Oklahoma', OR: 'Oregon', PA: 'Pennsylvania', RI: 'Rhode Island', SC: 'South Carolina', SD: 'South Dakota', TN: 'Tennessee', TX: 'Texas', UT: 'Utah', VT: 'Vermont', VA: 'Virginia', WA: 'Washington', WV: 'West Virginia', WI: 'Wisconsin', WY: 'Wyoming'
+    };
+    const stateQuery = state && state.length === 2 ? usStates[state.toUpperCase()] || state : state;
+
+    const query = isInternational ? encodeURIComponent(city) : encodeURIComponent(`${city}, ${stateQuery}`);
     const url = `https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`;
 
     const res = await fetch(url, {

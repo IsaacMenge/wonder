@@ -17,7 +17,9 @@ export function ActivityCard({ match }: ActivityCardProps) {
   const [chatOpen, setChatOpen] = useState(false);
   const router = useRouter();
   const { activity, score, matchReasons } = match;
-  const { users, loading, toggleInterest } = useActivityInterest(activity.id);
+  const { users, loading: saving, toggleInterest } = useActivityInterest(activity.id);
+  const [cooldown, setCooldown] = useState(false);
+  const loading = saving || cooldown;
   const joined = users.length > 0;
   // Get Unsplash image (prefer activity name, fallback to category)
   const { url: unsplashUrl, loading: imgLoading } = useUnsplashImage(activity.name + ' ' + (activity.categories[0] || ''));
@@ -81,10 +83,12 @@ export function ActivityCard({ match }: ActivityCardProps) {
         <div className="flex flex-col gap-3 mt-4">
           <div className="flex flex-col gap-2 items-center mb-2">
             <button
-              onClick={async () => {
-                // Fire and forget interest update
-                toggleInterest();
+              onClick={() => {
+                if (cooldown) return;
+                setCooldown(true);
+                setTimeout(() => setCooldown(false), 500);
                 router.push(`/activity/${activity.id}`);
+                toggleInterest().catch(() => {});
               }}
               disabled={loading}
               className={`px-4 py-2 rounded-full border border-purple-300 dark:border-purple-700 text-sm font-medium bg-transparent text-purple-700 dark:text-purple-200 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition disabled:opacity-50 w-44`}

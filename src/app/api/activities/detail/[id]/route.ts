@@ -56,7 +56,13 @@ import { NextRequest } from 'next/server';
 export async function GET(req: NextRequest) {
   // Extract the id param from the URL pathname
   const id = req.nextUrl.pathname.split('/').pop();
-  const { data, error } = await supabase.from('activity').select('*').eq('id', id).single();
+  const { data, error } = await supabase
+    .from('activity')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+
   if (error || !data) {
     console.error('Supabase error or no data:', error, data);
     return NextResponse.json({ error: 'Activity not found' }, { status: 404 });

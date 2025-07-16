@@ -35,7 +35,7 @@ export default function Home() {
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
             <Link
-              href="/explore"
+              href="/explore?reset=1"
               className="px-8 py-4 rounded-full bg-purple-600 text-white hover:bg-purple-700 transition-colors text-lg font-semibold"
             >
               Start Exploring

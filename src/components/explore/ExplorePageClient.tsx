@@ -61,7 +61,7 @@ export default function ExplorePageClient() {
           setRecommendations(cached.data);
         }
       }
-    } catch (_) {}
+    } catch {}
 
 
     setCityState({ city, state });
@@ -90,7 +90,7 @@ export default function ExplorePageClient() {
       // cache for future (24h)
       try {
         localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data }));
-      } catch (_) {}
+      } catch {}
       sessionStorage.setItem(
         'wonder_last_search',
         JSON.stringify({
